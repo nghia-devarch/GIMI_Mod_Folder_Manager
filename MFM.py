@@ -79,12 +79,7 @@ class GimiWorkspace(tk.Toplevel):
         self.btn_deploy = ttk.Button(tab_deploy, text="Chọn Các File Nén (Zip/Rar/7z)", command=self.run_auto_deploy)
         self.btn_deploy.pack(pady=5, fill="x", padx=10)
 
-        self.log_txt = tk.Text(tab_deploy, height=15, font=("Consolas", 9), state="disabled", 
-                               bg=self.app.colors['field'], fg=self.app.colors['fg'], 
-                               insertbackground=self.app.colors['cursor'])
-        self.log_txt.pack(fill="both", expand=True, padx=10, pady=(5, 10))
-
-        # Khu vực Tab 1
+        # Khu vực Tab 1 (Chỉ giữ 1 khung log_txt)
         self.log_txt = tk.Text(tab_deploy, height=15, font=("Consolas", 9), state="disabled", 
                                bg=self.app.colors['field'], fg=self.app.colors['fg'], 
                                insertbackground=self.app.colors['cursor'])
@@ -245,7 +240,7 @@ class TagManagerApp(tk.Tk):
         self.is_dark_mode = not self.is_dark_mode
         self.apply_theme()
 
-def apply_theme(self):
+    def apply_theme(self):
         # Thêm 2 màu mới: tab_unsel (màu tab khi không chọn) và cursor (màu con trỏ chuột)
         if self.is_dark_mode:
             self.colors = {'bg': '#2b2d30', 'fg': '#dfdfe0', 'field': '#1e1f22', 'select': '#2f65ca', 'btn': '#43454a', 'btn_act': '#4c5052', 'danger': '#e06c75', 'tab_unsel': '#393b40', 'cursor': '#ffffff'}
