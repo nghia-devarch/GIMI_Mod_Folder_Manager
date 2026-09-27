@@ -33,16 +33,11 @@ def format_folder_name(tags, base_name):
     return " ".join(valid_tags) + " " + base_name
 
 def is_exact_match(char_name, file_name):
-    """Xác định khớp tên chính xác, không bắt nhầm chuỗi con (VD: Al và Alhaitham)"""
-    # Lọc bỏ ký tự đặc biệt, chuyển thành space
     f_name = re.sub(r'[^a-zA-Z0-9]', ' ', file_name).lower()
     c_spaced = re.sub(r'[^a-zA-Z0-9]', ' ', char_name).lower()
     c_solid = re.sub(r'[^a-zA-Z0-9]', '', char_name).lower()
-
-    # Tạo regex kiểm tra ranh giới từ (\b)
     pattern1 = r'\b' + re.escape(c_spaced) + r'\b'
     pattern2 = r'\b' + re.escape(c_solid) + r'\b'
-    
     return bool(re.search(pattern1, f_name) or re.search(pattern2, f_name))
 
 # --- COMPONENT UI ---
@@ -71,7 +66,7 @@ class GimiWorkspace(tk.Toplevel):
         notebook = ttk.Notebook(self)
         notebook.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # TAB 1: Auto-Deploy Mod 
+        # TAB 1
         tab_deploy = ttk.Frame(notebook)
         notebook.add(tab_deploy, text="Triển khai File Mod (Auto-Route)")
 
@@ -79,17 +74,21 @@ class GimiWorkspace(tk.Toplevel):
         self.btn_deploy = ttk.Button(tab_deploy, text="Chọn Các File Nén (Zip/Rar/7z)", command=self.run_auto_deploy)
         self.btn_deploy.pack(pady=5, fill="x", padx=10)
 
-        # Khu vực Tab 1 (Chỉ giữ 1 khung log_txt)
         self.log_txt = tk.Text(tab_deploy, height=15, font=("Consolas", 9), state="disabled", 
                                bg=self.app.colors['field'], fg=self.app.colors['fg'], 
                                insertbackground=self.app.colors['cursor'])
         self.log_txt.pack(fill="both", expand=True, padx=10, pady=(5, 10))
 
-        # Khu vực Tab 2
+        # TAB 2
+        tab_batch = ttk.Frame(notebook)
+        notebook.add(tab_batch, text="Tạo Thư Mục Hàng Loạt")
+        
+        ttk.Label(tab_batch, text="Nhập danh sách tên nhân vật (mỗi tên 1 dòng):").pack(pady=10, padx=10, anchor="w")
         self.txt_batch = tk.Text(tab_batch, height=15, font=("Segoe UI", 10), 
                                  bg=self.app.colors['field'], fg=self.app.colors['fg'], 
                                  insertbackground=self.app.colors['cursor'])
         self.txt_batch.pack(fill="both", expand=True, padx=10)
+        ttk.Button(tab_batch, text="Tạo Các Thư Mục Này", command=self.run_batch_create).pack(pady=10, padx=10, fill="x")
 
     def log(self, message):
         self.log_txt.config(state="normal")
@@ -99,21 +98,19 @@ class GimiWorkspace(tk.Toplevel):
         self.update_idletasks()
 
     def apply_rule_2(self, base_folder):
-        """Khử lồng thư mục: Bóc vỏ hành an toàn tuyệt đối"""
         base_folder_norm = os.path.normpath(base_folder)
         peeled = False
-
         while True:
             try: items = os.listdir(base_folder_norm)
             except Exception: break
-                
+            
             files = [f for f in items if os.path.isfile(os.path.join(base_folder_norm, f))]
             dirs = [d for d in items if os.path.isdir(os.path.join(base_folder_norm, d))]
             valid_files = [f for f in files if f.lower() not in ['desktop.ini', 'thumbs.db', '.ds_store']]
-
+            
             if len(valid_files) > 0 or len(dirs) != 1:
                 break
-
+                
             single_sub_dir = dirs[0]
             sub_dir_path = os.path.join(base_folder_norm, single_sub_dir)
             self.log(f"   -> [Rule 2] Đang bóc lớp vỏ rác: '{single_sub_dir}'")
@@ -129,7 +126,7 @@ class GimiWorkspace(tk.Toplevel):
             except Exception as e:
                 self.log(f"   -> [Rule 2] Bị chặn khi gỡ lồng: {e}")
                 break
-
+                
         if peeled: self.log("   -> [Rule 2] Gỡ lồng hoàn tất.")
         else: self.log("   -> [Rule 2] Cấu trúc đã chuẩn, bỏ qua gỡ lồng.")
 
@@ -144,7 +141,6 @@ class GimiWorkspace(tk.Toplevel):
             ext = ext.lower()
             self.log(f"\nĐang xử lý: {basename}")
 
-            # ĐỐI SÁNH NHÂN VẬT (Exact Matching Regex)
             target_char = None
             for folder_name in self.app.folders:
                 _, char_name = get_tags_and_basename(folder_name)
@@ -158,7 +154,6 @@ class GimiWorkspace(tk.Toplevel):
                 uncat_path = os.path.join(self.app.root_dir, target_char)
                 if not os.path.exists(uncat_path): os.makedirs(uncat_path)
 
-            # TẠO FOLDER & GIẢI NÉN
             dest_path = os.path.join(self.app.root_dir, target_char, name_no_ext)
             if not os.path.exists(dest_path): os.makedirs(dest_path)
 
@@ -172,14 +167,13 @@ class GimiWorkspace(tk.Toplevel):
                     else:
                         raise Exception("Thiếu thư viện patool. Chạy 'pip install patool' và cài 7-Zip/WinRAR.")
                 
-                # Xác minh: Thư mục đích phải có dữ liệu (Check Size thay vì đếm file vì patool ko hỗ trợ đếm trước)
                 extracted_size = sum(os.path.getsize(os.path.join(dp, f)) for dp, dn, fn in os.walk(dest_path) for f in fn)
                 if extracted_size == 0:
                     raise Exception("Lỗi: Giải nén xong thư mục bị rỗng (File nén có thể bị hỏng)!")
 
                 self.log("   -> Giải nén thành công.")
                 self.apply_rule_2(dest_path)
-                os.remove(file_path) # Xoá gốc
+                os.remove(file_path)
                 self.log("   -> Đã xoá file nén gốc.")
 
             except Exception as e:
@@ -198,7 +192,6 @@ class GimiWorkspace(tk.Toplevel):
         if messagebox.askyesno("Xác nhận", f"Tạo {len(folders)} thư mục nhân vật?"):
             count = 0
             for f in folders:
-                # Lọc ký tự cấm cơ bản cho chắc kèo
                 safe_f = re.sub(r'[\\/*?:"<>|]', "", f) 
                 path = os.path.join(self.app.root_dir, safe_f)
                 if not os.path.exists(path):
@@ -216,21 +209,19 @@ class TagManagerApp(tk.Tk):
         self.geometry("1000x650")
         self.minsize(900, 550)
 
-        # Biến hệ thống
         self.root_dir = ""
         self.folders = []
         self.all_tags = set()
         self.current_selected = ""
         self.tag_vars = {}
-        self.mute_warning_until = 0 # Unix timestamp để ngưng cảnh báo
+        self.mute_warning_until = 0 
         self.is_dark_mode = True
 
         self.init_theme()
         self.create_menu()
         self.create_widgets()
-        self.apply_theme() # Khởi động với Dark Mode
+        self.apply_theme() 
 
-    # --- HỆ THỐNG GIAO DIỆN & SETTINGS ---
     def init_theme(self):
         self.style = ttk.Style(self)
         self.style.theme_use('clam')
@@ -240,56 +231,47 @@ class TagManagerApp(tk.Tk):
         self.is_dark_mode = not self.is_dark_mode
         self.apply_theme()
 
-        def apply_theme(self):
-            # Thêm 2 màu mới: tab_unsel (màu tab khi không chọn) và cursor (màu con trỏ chuột)
-            if self.is_dark_mode:
-                self.colors = {'bg': '#2b2d30', 'fg': '#dfdfe0', 'field': '#1e1f22', 'select': '#2f65ca', 'btn': '#43454a', 'btn_act': '#4c5052', 'danger': '#e06c75', 'tab_unsel': '#393b40', 'cursor': '#ffffff'}
-            else:
-                self.colors = {'bg': '#f0f0f0', 'fg': '#000000', 'field': '#ffffff', 'select': '#0078D7', 'btn': '#e1e1e1', 'btn_act': '#d1d1d1', 'danger': '#d32f2f', 'tab_unsel': '#d0d0d0', 'cursor': '#000000'}
-    
-            bg, fg, field, select = self.colors['bg'], self.colors['fg'], self.colors['field'], self.colors['select']
-    
-            self.config(bg=bg)
-            
-            # Xóa ép màu toàn cục, cấu hình chi tiết cho từng loại Widget
-            self.style.configure(".", background=bg, foreground=fg)
-            self.style.configure("TFrame", background=bg)
-            self.style.configure("TLabel", background=bg, foreground=fg)
-            self.style.configure("TLabelframe", background=bg, foreground=fg)
-            self.style.configure("TLabelframe.Label", background=bg, foreground=fg)
-            
-            # Nút bấm
-            self.style.configure("TButton", background=self.colors['btn'], foreground=fg, borderwidth=0, padding=5)
-            self.style.map("TButton", background=[("active", self.colors['btn_act'])])
-            self.style.configure("Danger.TButton", foreground=self.colors['danger'], font=("Segoe UI", 9, "bold"))
-            
-            # Checkbox
-            self.style.configure("TCheckbutton", background=bg, foreground=fg)
-            self.style.map("TCheckbutton", background=[("active", bg)], foreground=[("active", fg)])
-    
-            # Entry & Combobox (Sửa lỗi nền trắng ở Combobox)
-            self.style.configure("TEntry", fieldbackground=field, foreground=fg, insertcolor=self.colors['cursor'])
-            self.style.configure("TCombobox", fieldbackground=field, background=self.colors['btn'], foreground=fg)
-            self.style.map("TCombobox", fieldbackground=[("readonly", field)], foreground=[("readonly", fg)], selectbackground=[("readonly", select)])
-    
-            # Notebook Tabs (Sửa lỗi tàng hình chữ ở Tab không được chọn)
-            self.style.configure("TNotebook", background=bg, borderwidth=0)
-            self.style.configure("TNotebook.Tab", background=self.colors['tab_unsel'], foreground=fg, padding=[10, 2])
-            self.style.map("TNotebook.Tab", background=[("selected", field)], foreground=[("selected", fg)])
-    
-            # Cập nhật các Widget tiêu chuẩn của Tkinter
-            try:
-                self.checklist_frame.canvas.config(bg=bg)
-                self.checklist_frame.scrollable_frame.config(style="TFrame")
-            except: pass
-    
-            try: 
-                self.listbox.config(bg=field, fg=fg, selectbackground=select, selectforeground=fg)
-            except: pass
+    def apply_theme(self):
+        if self.is_dark_mode:
+            self.colors = {'bg': '#2b2d30', 'fg': '#dfdfe0', 'field': '#1e1f22', 'select': '#2f65ca', 'btn': '#43454a', 'btn_act': '#4c5052', 'danger': '#e06c75', 'tab_unsel': '#393b40', 'cursor': '#ffffff'}
+        else:
+            self.colors = {'bg': '#f0f0f0', 'fg': '#000000', 'field': '#ffffff', 'select': '#0078D7', 'btn': '#e1e1e1', 'btn_act': '#d1d1d1', 'danger': '#d32f2f', 'tab_unsel': '#d0d0d0', 'cursor': '#000000'}
 
-    # --- KHUNG CẢNH BÁO TUỲ CHỈNH ---
+        bg, fg, field, select = self.colors['bg'], self.colors['fg'], self.colors['field'], self.colors['select']
+
+        self.config(bg=bg)
+        
+        self.style.configure(".", background=bg, foreground=fg)
+        self.style.configure("TFrame", background=bg)
+        self.style.configure("TLabel", background=bg, foreground=fg)
+        self.style.configure("TLabelframe", background=bg, foreground=fg)
+        self.style.configure("TLabelframe.Label", background=bg, foreground=fg)
+        
+        self.style.configure("TButton", background=self.colors['btn'], foreground=fg, borderwidth=0, padding=5)
+        self.style.map("TButton", background=[("active", self.colors['btn_act'])])
+        self.style.configure("Danger.TButton", foreground=self.colors['danger'], font=("Segoe UI", 9, "bold"))
+        
+        self.style.configure("TCheckbutton", background=bg, foreground=fg)
+        self.style.map("TCheckbutton", background=[("active", bg)], foreground=[("active", fg)])
+
+        self.style.configure("TEntry", fieldbackground=field, foreground=fg, insertcolor=self.colors['cursor'])
+        self.style.configure("TCombobox", fieldbackground=field, background=self.colors['btn'], foreground=fg)
+        self.style.map("TCombobox", fieldbackground=[("readonly", field)], foreground=[("readonly", fg)], selectbackground=[("readonly", select)])
+
+        self.style.configure("TNotebook", background=bg, borderwidth=0)
+        self.style.configure("TNotebook.Tab", background=self.colors['tab_unsel'], foreground=fg, padding=[10, 2])
+        self.style.map("TNotebook.Tab", background=[("selected", field)], foreground=[("selected", fg)])
+
+        try:
+            self.checklist_frame.canvas.config(bg=bg)
+            self.checklist_frame.scrollable_frame.config(style="TFrame")
+        except: pass
+
+        try: 
+            self.listbox.config(bg=field, fg=fg, selectbackground=select, selectforeground=fg)
+        except: pass
+
     def ask_warning(self, title, msg):
-        """Hộp thoại xác nhận có nút Ngưng cảnh báo 5 phút"""
         if time.time() < self.mute_warning_until: return True
         
         res = tk.IntVar(value=0)
@@ -304,13 +286,13 @@ class TagManagerApp(tk.Tk):
         btn_frame.pack()
 
         def set_res(val, mute=False):
-            if mute: self.mute_warning_until = time.time() + 300 # 5 phút
+            if mute: self.mute_warning_until = time.time() + 300 
             res.set(val)
             dlg.destroy()
 
         ttk.Button(btn_frame, text="Đồng ý", command=lambda: set_res(1)).pack(side="left", padx=5)
         ttk.Button(btn_frame, text="Hủy", command=lambda: set_res(0)).pack(side="left", padx=5)
-        ttk.Button(btn_frame, text="Đồng ý (Ngưng hỏi trong 5p)", command=lambda: set_res(1, True)).pack(side="left", padx=5)
+        ttk.Button(btn_frame, text="Đồng ý (Ngưng hỏi 5p)", command=lambda: set_res(1, True)).pack(side="left", padx=5)
 
         self.wait_window(dlg)
         return res.get() == 1
@@ -339,7 +321,6 @@ class TagManagerApp(tk.Tk):
         main_pane = ttk.PanedWindow(self, orient="horizontal")
         main_pane.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # --- PANEL TRÁI ---
         left_frame = ttk.Frame(main_pane)
         main_pane.add(left_frame, weight=1)
 
@@ -364,25 +345,21 @@ class TagManagerApp(tk.Tk):
         list_scroll.pack(side="right", fill="y")
         self.listbox.config(yscrollcommand=list_scroll.set)
         
-        # Bindings cho Listbox
         self.listbox.bind("<<ListboxSelect>>", self.on_folder_select)
-        self.listbox.bind("<Button-3>", self.show_context_menu) # Chuột phải
+        self.listbox.bind("<Button-3>", self.show_context_menu) 
 
-        # Menu Chuột phải
         self.ctx_menu = tk.Menu(self, tearoff=0)
         self.ctx_menu.add_command(label="Mở trong File Explorer", command=self.open_in_explorer)
         self.ctx_menu.add_separator()
         self.ctx_menu.add_command(label="Đổi tên Thư mục", command=self.action_rename_folder)
         self.ctx_menu.add_command(label="❌ Xóa Thư mục này", command=self.action_delete_folder)
 
-        # --- PANEL PHẢI ---
         self.right_frame = ttk.Frame(main_pane)
         main_pane.add(self.right_frame, weight=1)
 
         self.lbl_selected_folder = ttk.Label(self.right_frame, text="Vui lòng chọn một thư mục bên trái", font=("Segoe UI", 12, "bold"))
         self.lbl_selected_folder.pack(anchor="w", pady=(0, 10))
 
-        # Khung công cụ sử dụng thường xuyên (Quản lý Tag)
         tag_control_frame = ttk.LabelFrame(self.right_frame, text="Quản lý Tag Thư Mục", padding=10)
         tag_control_frame.pack(fill="both", expand=True)
 
@@ -395,15 +372,12 @@ class TagManagerApp(tk.Tk):
         ttk.Button(add_frame, text="Thêm Tag Mới", command=self.add_new_tag).pack(side="right")
 
         ttk.Button(tag_control_frame, text="Xoá TẤT CẢ Tag của thư mục này", command=self.clear_all_tags).pack(fill="x", pady=(0, 5))
-        
-        # Nút Quản lý Global (Đưa ra UI chính theo yêu cầu)
         ttk.Button(tag_control_frame, text="⚙️ Xoá 1 Tag trên TOÀN BỘ thư mục Root", command=self.open_tag_manager).pack(fill="x", pady=(0, 10))
 
         ttk.Label(tag_control_frame, text="Danh sách Tag hệ thống (Tick để Gắn/Gỡ lẻ):", font=("Segoe UI", 9, "italic")).pack(anchor="w", pady=(5, 5))
         self.checklist_frame = ScrollableFrame(tag_control_frame)
         self.checklist_frame.pack(fill="both", expand=True)
 
-        # KHU VỰC ĐÁY (Vùng khoanh đỏ) - Tuỳ chỉnh Folder
         action_frame = ttk.LabelFrame(self.right_frame, text="Tuỳ chỉnh Folder", padding=10)
         action_frame.pack(fill="x", pady=(10, 0), side="bottom")
 
@@ -418,7 +392,6 @@ class TagManagerApp(tk.Tk):
 
         self.disable_right_panel()
 
-    # --- HÀM THAO TÁC FOLDER MỚI (RENAME / DELETE) ---
     def show_context_menu(self, event):
         idx = self.listbox.nearest(event.y)
         if idx >= 0:
@@ -448,7 +421,6 @@ class TagManagerApp(tk.Tk):
             self.update_folder_list()
             self.refresh_checklist()
             
-            # Chọn lại trên UI
             items = self.listbox.get(0, tk.END)
             if new_full in items:
                 self.listbox.selection_set(items.index(new_full))
@@ -470,7 +442,6 @@ class TagManagerApp(tk.Tk):
         except Exception as e:
             messagebox.showerror("Lỗi", f"Không thể xoá: {e}")
 
-    # --- CÁC HÀM XỬ LÝ CŨ ---
     def load_root_dir(self):
         fp = filedialog.askdirectory(title="Chọn Thư Mục Root")
         if fp:
