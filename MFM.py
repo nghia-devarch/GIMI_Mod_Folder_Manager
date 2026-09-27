@@ -79,17 +79,22 @@ class GimiWorkspace(tk.Toplevel):
         self.btn_deploy = ttk.Button(tab_deploy, text="Chọn Các File Nén (Zip/Rar/7z)", command=self.run_auto_deploy)
         self.btn_deploy.pack(pady=5, fill="x", padx=10)
 
-        self.log_txt = tk.Text(tab_deploy, height=15, font=("Consolas", 9), state="disabled", bg=self.app.colors['bg'], fg=self.app.colors['fg'])
+        self.log_txt = tk.Text(tab_deploy, height=15, font=("Consolas", 9), state="disabled", 
+                               bg=self.app.colors['field'], fg=self.app.colors['fg'], 
+                               insertbackground=self.app.colors['cursor'])
         self.log_txt.pack(fill="both", expand=True, padx=10, pady=(5, 10))
 
-        # TAB 2: Batch Creator 
-        tab_batch = ttk.Frame(notebook)
-        notebook.add(tab_batch, text="Tạo Thư Mục Hàng Loạt")
-        ttk.Label(tab_batch, text="Nhập danh sách tên nhân vật (mỗi tên 1 dòng):").pack(pady=10, padx=10, anchor="w")
-        
-        self.txt_batch = tk.Text(tab_batch, height=15, font=("Segoe UI", 10), bg=self.app.colors['field'], fg=self.app.colors['fg'])
+        # Khu vực Tab 1
+        self.log_txt = tk.Text(tab_deploy, height=15, font=("Consolas", 9), state="disabled", 
+                               bg=self.app.colors['field'], fg=self.app.colors['fg'], 
+                               insertbackground=self.app.colors['cursor'])
+        self.log_txt.pack(fill="both", expand=True, padx=10, pady=(5, 10))
+
+        # Khu vực Tab 2
+        self.txt_batch = tk.Text(tab_batch, height=15, font=("Segoe UI", 10), 
+                                 bg=self.app.colors['field'], fg=self.app.colors['fg'], 
+                                 insertbackground=self.app.colors['cursor'])
         self.txt_batch.pack(fill="both", expand=True, padx=10)
-        ttk.Button(tab_batch, text="Tạo Các Thư Mục Này", command=self.run_batch_create).pack(pady=10, padx=10, fill="x")
 
     def log(self, message):
         self.log_txt.config(state="normal")
@@ -240,33 +245,51 @@ class TagManagerApp(tk.Tk):
         self.is_dark_mode = not self.is_dark_mode
         self.apply_theme()
 
-    def apply_theme(self):
+def apply_theme(self):
+        # Thêm 2 màu mới: tab_unsel (màu tab khi không chọn) và cursor (màu con trỏ chuột)
         if self.is_dark_mode:
-            self.colors = {'bg': '#2b2d30', 'fg': '#dfdfe0', 'field': '#1e1f22', 'select': '#2f65ca', 'btn': '#43454a', 'btn_act': '#4c5052', 'danger': '#e06c75'}
+            self.colors = {'bg': '#2b2d30', 'fg': '#dfdfe0', 'field': '#1e1f22', 'select': '#2f65ca', 'btn': '#43454a', 'btn_act': '#4c5052', 'danger': '#e06c75', 'tab_unsel': '#393b40', 'cursor': '#ffffff'}
         else:
-            self.colors = {'bg': '#f0f0f0', 'fg': '#000000', 'field': '#ffffff', 'select': '#0078D7', 'btn': '#e1e1e1', 'btn_act': '#d1d1d1', 'danger': '#d32f2f'}
+            self.colors = {'bg': '#f0f0f0', 'fg': '#000000', 'field': '#ffffff', 'select': '#0078D7', 'btn': '#e1e1e1', 'btn_act': '#d1d1d1', 'danger': '#d32f2f', 'tab_unsel': '#d0d0d0', 'cursor': '#000000'}
 
         bg, fg, field, select = self.colors['bg'], self.colors['fg'], self.colors['field'], self.colors['select']
 
         self.config(bg=bg)
-        self.style.configure(".", background=bg, foreground=fg, fieldbackground=field, selectbackground=select, selectforeground=fg)
-        self.style.configure("TButton", background=self.colors['btn'], borderwidth=0, padding=5)
+        
+        # Xóa ép màu toàn cục, cấu hình chi tiết cho từng loại Widget
+        self.style.configure(".", background=bg, foreground=fg)
+        self.style.configure("TFrame", background=bg)
+        self.style.configure("TLabel", background=bg, foreground=fg)
+        self.style.configure("TLabelframe", background=bg, foreground=fg)
+        self.style.configure("TLabelframe.Label", background=bg, foreground=fg)
+        
+        # Nút bấm
+        self.style.configure("TButton", background=self.colors['btn'], foreground=fg, borderwidth=0, padding=5)
         self.style.map("TButton", background=[("active", self.colors['btn_act'])])
         self.style.configure("Danger.TButton", foreground=self.colors['danger'], font=("Segoe UI", 9, "bold"))
-        self.style.configure("TLabel", background=bg)
-        self.style.configure("TLabelframe", background=bg)
-        self.style.configure("TLabelframe.Label", background=bg, foreground=fg)
-        self.style.configure("TCheckbutton", background=bg)
-        self.style.map("TCheckbutton", background=[("active", bg)])
+        
+        # Checkbox
+        self.style.configure("TCheckbutton", background=bg, foreground=fg)
+        self.style.map("TCheckbutton", background=[("active", bg)], foreground=[("active", fg)])
 
-        # Cập nhật Canvas/Scrollable Frame
+        # Entry & Combobox (Sửa lỗi nền trắng ở Combobox)
+        self.style.configure("TEntry", fieldbackground=field, foreground=fg, insertcolor=self.colors['cursor'])
+        self.style.configure("TCombobox", fieldbackground=field, background=self.colors['btn'], foreground=fg)
+        self.style.map("TCombobox", fieldbackground=[("readonly", field)], foreground=[("readonly", fg)], selectbackground=[("readonly", select)])
+
+        # Notebook Tabs (Sửa lỗi tàng hình chữ ở Tab không được chọn)
+        self.style.configure("TNotebook", background=bg, borderwidth=0)
+        self.style.configure("TNotebook.Tab", background=self.colors['tab_unsel'], foreground=fg, padding=[10, 2])
+        self.style.map("TNotebook.Tab", background=[("selected", field)], foreground=[("selected", fg)])
+
+        # Cập nhật các Widget tiêu chuẩn của Tkinter
         try:
             self.checklist_frame.canvas.config(bg=bg)
             self.checklist_frame.scrollable_frame.config(style="TFrame")
         except: pass
 
-        # Cập nhật Listbox thủ công
-        try: self.listbox.config(bg=field, fg=fg, selectbackground=select, selectforeground=fg)
+        try: 
+            self.listbox.config(bg=field, fg=fg, selectbackground=select, selectforeground=fg)
         except: pass
 
     # --- KHUNG CẢNH BÁO TUỲ CHỈNH ---
