@@ -1,80 +1,77 @@
-🌟 GIMI Mod Manager Pro (MFM)
-Một công cụ giao diện đồ họa (GUI) siêu nhẹ được viết bằng Python/Tkinter, thiết kế chuyên biệt để giúp người dùng GIMI (Genshin Impact Model Importer) tự động hoá việc quản lý, phân loại và cài đặt Mod.
+# 🌟 GIMI Mod Manager Pro (MFM)
 
-Thay vì phải giải nén thủ công, kéo thả từng file, hay đối mặt với lỗi mod không hoạt động do lồng nhiều thư mục, GIMI Mod Manager Pro sẽ xử lý tất cả chỉ với vài cú click.
+An ultra-lightweight graphical user interface (GUI) tool written in Python/Tkinter, specifically designed to help GIMI (Genshin Impact Model Importer) users automate the management, categorization, and installation of Mods. 
 
-✨ Tính năng nổi bật
-1. 🏷️ Hệ thống Quản lý Tag Thư mục (Tagging System)
-Đổi tên thư mục tự động theo cấu trúc chuẩn: [Tag1] [Tag2] Tên_Nhân_Vật.
+Instead of manually extracting archives, dragging and dropping files, or dealing with broken mods due to nested directory structures, **GIMI Mod Manager Pro** handles everything with just a few clicks.
 
-Thêm, xóa, hoặc bật/tắt (tick/untick) hàng loạt tag thông qua bảng điều khiển bên phải.
+---
 
-Global Tag Manager: Trình quản lý cho phép xóa sạch 1 tag cụ thể trên TOÀN BỘ thư mục hệ thống chỉ bằng 1 nút bấm.
+## ✨ Key Features
 
-2. 🚀 Triển khai Mod Tự động (Auto-Deploy & Routing)
-Công cụ mạnh mẽ nhất giải quyết 100% sự phiền toái khi tải Mod:
+### 1. 🏷️ Folder Tagging System
+* Automatically renames folders following a standard structure: `[Tag1] [Tag2] Character_Name`.
+* Add, remove, or toggle (tick/untick) multiple tags at once via the right-side control panel.
+* **Global Tag Manager:** A dedicated tool that allows you to completely wipe a specific tag across ALL folders in your root directory with a single click.
 
-Nhận diện Thông minh (Exact Match Regex): Tự động đọc tên file nén (.zip, .rar, .7z) và đưa vào đúng thư mục nhân vật tương ứng (VD: file chứa từ hutao sẽ vào folder Hu Tao). Không bao giờ nhận diện nhầm chuỗi con.
+### 2. 🚀 Automated Mod Deployment (Auto-Deploy & Routing)
+The most powerful tool that eliminates 100% of the hassle when downloading mods:
+* **Smart Routing (Exact Match Regex):** Automatically reads the archive's name (`.zip`, `.rar`, `.7z`) and routes it to the correct character folder (e.g., a file containing `hutao` will be sent to the `Hu Tao` folder). Prevents false positives with substrings.
+* **Safe Extraction:** Automatically creates a dedicated sub-folder for each Mod, preventing file clutter and overwrites. Includes data integrity verification (Size Check) before proceeding.
+* **Smart Un-nesting (Rule 2 - Onion Peeling Algorithm):** Automatically detects mods trapped inside multiple layers of junk folders, pulling core resource files (`.ini`, `.dds`, `.ib`) out to match GIMI's strict folder structure. 100% safe for Merged Mods or Multi-variant Mods.
+* **Auto-Cleanup:** Automatically deletes the original archive files upon successful deployment.
 
-Giải nén An toàn: Tự tạo thư mục riêng cho từng Mod, tránh tình trạng xả rác file đè lên nhau. Hỗ trợ xác minh toàn vẹn dữ liệu (Size Check) trước khi tiếp tục.
+### 3. 📁 Batch Folder Creator
+* Initialize a directory structure for dozens of characters in just 1 second.
+* Supports copy/pasting character name lists, automatically filtering out forbidden Windows characters.
 
-Smart Un-nesting (Rule 2 - Thuật toán Bóc Vỏ Hành): Tự động phát hiện các mod bị bọc trong nhiều lớp folder rác, lôi các file tài nguyên (.ini, .dds, .ib) ra ngoài đúng cấu trúc chuẩn của GIMI. An toàn tuyệt đối với các dạng Mod Gộp (Merged Mod) hoặc Đa biến thể.
+### 4. 🛠️ Convenient File Management & Optimized UI/UX
+* **Context Menu (Right-click):** Quickly Delete, Rename, or Reveal in File Explorer directly from the list.
+* **Mute Warnings:** Temporarily silence deletion/renaming confirmation prompts for 5 minutes, enabling high-speed folder cleanup.
+* **Native Dark Mode:** Modern, eye-friendly dark interface (default), with an option to toggle to Light Mode in the settings.
 
-Dọn dẹp: Tự động xoá file nén gốc sau khi triển khai thành công.
+---
 
-3. 📁 Tạo Thư Mục Hàng Loạt (Batch Creator)
-Khởi tạo cấu trúc hàng chục nhân vật chỉ trong 1 giây.
+## ⚙️ System Requirements & Installation
 
-Hỗ trợ copy/paste danh sách tên nhân vật, tự động lọc các ký tự cấm của Windows.
+The application runs directly via Python and requires the following environment:
+* **Python 3.8** or higher.
+* **WinRAR** or **7-Zip** installed on your system (required for extracting `.rar` and `.7z` files).
 
-4. 🛠️ Quản lý File Tiện dụng & UI/UX Tối ưu
-Menu Chuột phải (Context Menu): Xóa, đổi tên, mở thư mục trực tiếp trên danh sách.
+### Installation Steps:
+1. Clone this repository to your local machine:
+   ```bash
+   git clone https://github.com/nghia-devarch/GIMI_Mod_Manager_Pro.git
+   cd GIMI_Mod_Manager_Pro
+   ```
+2. Install the required extraction dependency (`patool`):
+   ```bash
+   pip install patool
+   ```
+3. Run the application:
+   ```bash
+   python MFM.py
+   ```
+   *(Recommendation: You can use `pyinstaller --noconsole --onefile MFM.py` to compile the script into a single, standalone `.exe` file for convenience).*
 
-Mute Warnings: Tính năng ngưng hỏi cảnh báo xóa/đổi tên trong vòng 5 phút, giúp thao tác rọn rác thư mục tốc độ cao.
+---
 
-Dark Mode Native: Giao diện tối hiện đại, bảo vệ mắt (mặc định), có thể chuyển đổi sang Light Mode trong cài đặt.
+## 📖 Quick Start Guide
 
-⚙️ Yêu cầu Hệ thống & Cài đặt
-Ứng dụng chạy trực tiếp bằng Python, yêu cầu môi trường như sau:
+1. Launch the software, click **📂 Choose Root Folder**, and select your GIMI Mods directory.
+2. Your character list/folders will appear in the left column. Click any folder to start managing its Tags in the right panel.
+3. To quickly extract newly downloaded mods:
+   * Go to **Advanced Toolbox** in the top Menu Bar > Select **Open GIMI Mod Workspace**.
+   * Switch to the **Auto-Route** tab.
+   * Click **Select Archives** (supports multi-selection) and watch the software automatically categorize, extract, and optimize your mod structures.
 
-Python 3.8 trở lên.
+---
 
-Đã cài đặt WinRAR hoặc 7-Zip trên máy tính (để giải nén .rar và .7z).
+## ⚠️ Note on Mod Structure (Rule 2)
 
-Các bước cài đặt:
-Clone repository này về máy:
+The un-nesting algorithm (Rule 2) is designed with extreme caution:
+* The system will only peel off a folder layer if the outermost layer contains **EXACTLY 1 sub-folder** and **ZERO other files** (excluding system junk files like `desktop.ini` or `thumbs.db`).
+* If a folder contains 2 or more sub-folders (e.g., a Mod packed with multiple outfit variants), the system will recognize this as the Modder's intent and abort the un-nesting process to preserve your data.
 
-Bash
-git clone https://github.com/your-username/GIMI_Mod_Manager_Pro.git
-cd GIMI_Mod_Manager_Pro
-Cài đặt thư viện xử lý giải nén patool:
+---
 
-Bash
-pip install patool
-Chạy ứng dụng:
-
-Bash
-python MFM.py
-(Khuyến nghị: Bạn có thể dùng pyinstaller --noconsole --onefile MFM.py để đóng gói thành 1 file .exe duy nhất sử dụng cho tiện).
-
-📖 Hướng dẫn Sử dụng Nhanh
-Khởi động phần mềm, bấm 📂 Chọn Thư Mục Root và trỏ đến thư mục Mods của GIMI.
-
-Danh sách nhân vật/folder sẽ hiện ở cột trái. Nhấp chuột vào 1 folder để bắt đầu gắn Tag ở cột phải.
-
-Để giải nén nhanh các mod vừa tải về:
-
-Chọn Toolbox Nâng cao trên thanh Menu > Mở GIMI Mod Workspace.
-
-Chuyển sang Tab Auto-Route.
-
-Bấm Chọn Các File Nén (hỗ trợ chọn nhiều file cùng lúc) và ngồi xem phần mềm tự động phân loại, xả nén, và tối ưu hóa cấu trúc.
-
-⚠️ Lưu ý Cấu trúc Mod (Rule 2)
-Thuật toán khử lồng (Rule 2) được thiết kế cực kỳ thận trọng:
-
-Hệ thống sẽ chỉ lột bỏ thư mục nếu lớp bên ngoài cùng chỉ chứa ĐÚNG 1 thư mục con và KHÔNG chứa bất kỳ file nào khác (ngoại trừ file rác desktop.ini).
-
-Nếu thư mục chứa từ 2 thư mục con trở lên (VD: Mod gộp nhiều trang phục), hệ thống sẽ nhận diện đây là chủ đích của Modder và dừng việc gỡ lồng để bảo toàn dữ liệu.
-
-Phát triển bởi [Nghĩa Trịnh Xuân] - Tối ưu hóa trải nghiệm Mod Genshin Impact.
+Developed by **Nghĩa Trịnh Xuân** - Optimizing the Genshin Impact Modding Experience.
