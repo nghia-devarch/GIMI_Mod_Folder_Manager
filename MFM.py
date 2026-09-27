@@ -1,10 +1,11 @@
 import os
 import re
 import shutil
+import time
 import zipfile
 import subprocess
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from tkinter import ttk, filedialog, messagebox, simpledialog
 
 try:
     import patoolib
@@ -12,7 +13,7 @@ try:
 except ImportError:
     HAS_PATOOL = False
 
-# --- CÁC HÀM TIỆN ÍCH CHO TAG ---
+# --- CÁC HÀM TIỆN ÍCH ---
 def get_tags_and_basename(folder_name):
     tags = []
     base_name = folder_name.strip()
@@ -31,6 +32,19 @@ def format_folder_name(tags, base_name):
     if not valid_tags: return base_name
     return " ".join(valid_tags) + " " + base_name
 
+def is_exact_match(char_name, file_name):
+    """Xác định khớp tên chính xác, không bắt nhầm chuỗi con (VD: Al và Alhaitham)"""
+    # Lọc bỏ ký tự đặc biệt, chuyển thành space
+    f_name = re.sub(r'[^a-zA-Z0-9]', ' ', file_name).lower()
+    c_spaced = re.sub(r'[^a-zA-Z0-9]', ' ', char_name).lower()
+    c_solid = re.sub(r'[^a-zA-Z0-9]', '', char_name).lower()
+
+    # Tạo regex kiểm tra ranh giới từ (\b)
+    pattern1 = r'\b' + re.escape(c_spaced) + r'\b'
+    pattern2 = r'\b' + re.escape(c_solid) + r'\b'
+    
+    return bool(re.search(pattern1, f_name) or re.search(pattern2, f_name))
+
 # --- COMPONENT UI ---
 class ScrollableFrame(ttk.Frame):
     def __init__(self, container, *args, **kwargs):
@@ -45,38 +59,36 @@ class ScrollableFrame(ttk.Frame):
         self.canvas.pack(side="left", fill="both", expand=True)
         self.scrollbar.pack(side="right", fill="y")
 
-# --- MODULE GIMI MOD WORKSPACE ---
+# --- MODULE GIMI MOD WORKSPACE (TOOLBOX) ---
 class GimiWorkspace(tk.Toplevel):
     def __init__(self, parent, app_instance):
         super().__init__(parent)
         self.app = app_instance
-        self.title("GIMI Mod Workspace")
-        self.geometry("600x450")
+        self.title("GIMI Toolbox (Dùng 1 lần)")
+        self.geometry("650x480")
         self.grab_set()
 
         notebook = ttk.Notebook(self)
         notebook.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # TAB 1: Auto-Deploy Mod (Tool 1 + Tool 2 + Rule 2)
+        # TAB 1: Auto-Deploy Mod 
         tab_deploy = ttk.Frame(notebook)
         notebook.add(tab_deploy, text="Triển khai File Mod (Auto-Route)")
 
-        ttk.Label(tab_deploy, text="Hệ thống tự nhận diện file nén -> Chuyển vào folder -> Giải nén -> Khử lồng & Xoá file ZIP/RAR gốc.", wraplength=550).pack(pady=10, padx=10, anchor="w")
-        
-        self.btn_deploy = ttk.Button(tab_deploy, text="Chọn File Nén Cần Chuyển (Zip/Rar)", command=self.run_auto_deploy)
+        ttk.Label(tab_deploy, text="Tự nhận diện file -> Đưa vào folder nhân vật -> Giải nén (.zip/.rar/.7z) -> Khử lồng & Xoá nén gốc.", wraplength=600).pack(pady=10, padx=10, anchor="w")
+        self.btn_deploy = ttk.Button(tab_deploy, text="Chọn Các File Nén (Zip/Rar/7z)", command=self.run_auto_deploy)
         self.btn_deploy.pack(pady=5, fill="x", padx=10)
 
-        self.log_txt = tk.Text(tab_deploy, height=15, font=("Consolas", 9), state="disabled")
+        self.log_txt = tk.Text(tab_deploy, height=15, font=("Consolas", 9), state="disabled", bg=self.app.colors['bg'], fg=self.app.colors['fg'])
         self.log_txt.pack(fill="both", expand=True, padx=10, pady=(5, 10))
 
-        # TAB 2: Batch Creator (Tool 3)
+        # TAB 2: Batch Creator 
         tab_batch = ttk.Frame(notebook)
-        notebook.add(tab_batch, text="Tạo Thư Mục Hàng Loạt (Batch Creator)")
-
-        ttk.Label(tab_batch, text="Nhập danh sách tên nhân vật/thư mục (mỗi tên 1 dòng, ngăn bằng Enter):").pack(pady=10, padx=10, anchor="w")
-        self.txt_batch = tk.Text(tab_batch, height=15, font=("Segoe UI", 10))
-        self.txt_batch.pack(fill="both", expand=True, padx=10)
+        notebook.add(tab_batch, text="Tạo Thư Mục Hàng Loạt")
+        ttk.Label(tab_batch, text="Nhập danh sách tên nhân vật (mỗi tên 1 dòng):").pack(pady=10, padx=10, anchor="w")
         
+        self.txt_batch = tk.Text(tab_batch, height=15, font=("Segoe UI", 10), bg=self.app.colors['field'], fg=self.app.colors['fg'])
+        self.txt_batch.pack(fill="both", expand=True, padx=10)
         ttk.Button(tab_batch, text="Tạo Các Thư Mục Này", command=self.run_batch_create).pack(pady=10, padx=10, fill="x")
 
     def log(self, message):
@@ -87,99 +99,95 @@ class GimiWorkspace(tk.Toplevel):
         self.update_idletasks()
 
     def apply_rule_2(self, base_folder):
-        """Khử lồng thư mục: Tìm file .ini, kéo toàn bộ cấp thư mục chứa nó ra ngoài cùng."""
-        ini_path = None
-        for root, dirs, files in os.walk(base_folder):
-            if any(f.lower().endswith('.ini') for f in files):
-                ini_path = root
-                break
-        
+        """Khử lồng thư mục: Bóc vỏ hành an toàn tuyệt đối"""
         base_folder_norm = os.path.normpath(base_folder)
-        
-        if ini_path:
-            ini_path_norm = os.path.normpath(ini_path)
-            if ini_path_norm != base_folder_norm:
-                self.log(f"   -> [Rule 2] Đang gỡ lồng thư mục cho Mod này...")
-                temp_dir = base_folder_norm + "_temp_deploy"
-                os.rename(base_folder_norm, temp_dir) # Đổi tên folder gốc thành tạm
+        peeled = False
+
+        while True:
+            try: items = os.listdir(base_folder_norm)
+            except Exception: break
                 
-                # Tìm đường dẫn tương đối để lôi file ra
-                rel_path = os.path.relpath(ini_path_norm, base_folder_norm)
-                new_ini_path = os.path.join(temp_dir, rel_path)
-                
-                os.rename(new_ini_path, base_folder_norm) # Đổi tên folder chứa mod thực sự thành folder gốc
-                shutil.rmtree(temp_dir, ignore_errors=True) # Dọn rác
-                self.log(f"   -> [Rule 2] Hoàn tất gỡ lồng.")
+            files = [f for f in items if os.path.isfile(os.path.join(base_folder_norm, f))]
+            dirs = [d for d in items if os.path.isdir(os.path.join(base_folder_norm, d))]
+            valid_files = [f for f in files if f.lower() not in ['desktop.ini', 'thumbs.db', '.ds_store']]
+
+            if len(valid_files) > 0 or len(dirs) != 1:
+                break
+
+            single_sub_dir = dirs[0]
+            sub_dir_path = os.path.join(base_folder_norm, single_sub_dir)
+            self.log(f"   -> [Rule 2] Đang bóc lớp vỏ rác: '{single_sub_dir}'")
+            
+            try:
+                sub_items = os.listdir(sub_dir_path)
+                for item in sub_items:
+                    src = os.path.join(sub_dir_path, item)
+                    dst = os.path.join(base_folder_norm, item)
+                    shutil.move(src, dst)
+                os.rmdir(sub_dir_path)
+                peeled = True
+            except Exception as e:
+                self.log(f"   -> [Rule 2] Bị chặn khi gỡ lồng: {e}")
+                break
+
+        if peeled: self.log("   -> [Rule 2] Gỡ lồng hoàn tất.")
+        else: self.log("   -> [Rule 2] Cấu trúc đã chuẩn, bỏ qua gỡ lồng.")
 
     def run_auto_deploy(self):
-        files = filedialog.askopenfilenames(title="Chọn các file Mod (.zip, .rar)", filetypes=[("Archive Files", "*.zip *.rar")])
+        files = filedialog.askopenfilenames(title="Chọn Mod", filetypes=[("Archive Files", "*.zip *.rar *.7z")])
         if not files: return
-
         self.log("Bắt đầu quy trình Deploy...")
-        for file in files:
-            basename = os.path.basename(file)
+        
+        for file_path in files:
+            basename = os.path.basename(file_path)
             name_no_ext, ext = os.path.splitext(basename)
             ext = ext.lower()
             self.log(f"\nĐang xử lý: {basename}")
 
-            # [Tool 2: VẬN CHUYỂN / ĐỐI SÁNH]
+            # ĐỐI SÁNH NHÂN VẬT (Exact Matching Regex)
             target_char = None
             for folder_name in self.app.folders:
                 _, char_name = get_tags_and_basename(folder_name)
-                # Check nếu tên nhân vật xuất hiện trong tên file nén
-                if char_name.lower() in name_no_ext.lower():
+                if is_exact_match(char_name, name_no_ext):
                     target_char = folder_name
                     break
             
             if not target_char:
-                target_char = "Uncategorized_Mods" # Dự phòng nếu ko khớp nhân vật nào
-                self.log(f"   -> Cảnh báo: Không tìm thấy nhân vật khớp, đưa vào '{target_char}'")
+                target_char = "Uncategorized_Mods"
+                self.log(f"   -> Cảnh báo: Không khớp ai, đưa vào '{target_char}'")
                 uncat_path = os.path.join(self.app.root_dir, target_char)
                 if not os.path.exists(uncat_path): os.makedirs(uncat_path)
 
-            # [Tool 1: TẠO FOLDER ĐÍCH VÀ GIẢI NÉN]
+            # TẠO FOLDER & GIẢI NÉN
             dest_path = os.path.join(self.app.root_dir, target_char, name_no_ext)
-            if not os.path.exists(dest_path):
-                os.makedirs(dest_path)
-                self.log(f"   -> Tạo thư mục: {target_char}/{name_no_ext}")
+            if not os.path.exists(dest_path): os.makedirs(dest_path)
 
             try:
-                expected_files = 0
                 if ext == '.zip':
-                    with zipfile.ZipFile(file, 'r') as zf:
-                        expected_files = len([f for f in zf.namelist() if not f.endswith('/')])
+                    with zipfile.ZipFile(file_path, 'r') as zf:
                         zf.extractall(dest_path)
-                elif ext == '.rar':
+                elif ext in ['.rar', '.7z']:
                     if HAS_PATOOL:
-                        patoolib.extract_archive(file, outdir=dest_path, interactive=False, verbosity=-1)
+                        patoolib.extract_archive(file_path, outdir=dest_path, interactive=False, verbosity=-1)
                     else:
-                        raise Exception("Thiếu thư viện patool. Hãy chạy lệnh 'pip install patool'.")
+                        raise Exception("Thiếu thư viện patool. Chạy 'pip install patool' và cài 7-Zip/WinRAR.")
                 
-                # [XÁC MINH CÓ ĐỦ FILE SAU GIẢI NÉN KHÔNG]
-                extracted_files = sum(len(fs) for _, _, fs in os.walk(dest_path))
-                
-                if extracted_files == 0:
-                    raise Exception("Lỗi: Thư mục đích bị trống sau khi giải nén!")
-                if ext == '.zip' and extracted_files < expected_files:
-                    raise Exception(f"Lỗi: Thiếu file! Gốc có {expected_files}, giải nén ra {extracted_files}")
+                # Xác minh: Thư mục đích phải có dữ liệu (Check Size thay vì đếm file vì patool ko hỗ trợ đếm trước)
+                extracted_size = sum(os.path.getsize(os.path.join(dp, f)) for dp, dn, fn in os.walk(dest_path) for f in fn)
+                if extracted_size == 0:
+                    raise Exception("Lỗi: Giải nén xong thư mục bị rỗng (File nén có thể bị hỏng)!")
 
-                self.log("   -> Giải nén và Xác minh dữ liệu: THÀNH CÔNG.")
-                
-                # [Rule 2: GỠ LỒNG THƯ MỤC]
+                self.log("   -> Giải nén thành công.")
                 self.apply_rule_2(dest_path)
-
-                # [XOÁ FILE NÉN GỐC SAU KHI MỌI THỨ HOÀN TẤT]
-                os.remove(file)
+                os.remove(file_path) # Xoá gốc
                 self.log("   -> Đã xoá file nén gốc.")
 
             except Exception as e:
                 self.log(f"   -> LỖI: {e}")
-                # Nếu lỗi xảy ra giữa chừng, xoá folder giải nén hỏng đi
-                if os.path.exists(dest_path):
-                    shutil.rmtree(dest_path, ignore_errors=True)
+                if os.path.exists(dest_path): shutil.rmtree(dest_path, ignore_errors=True)
         
         self.app.scan_directories()
-        self.log("\n=== TẤT CẢ QUY TRÌNH HOÀN TẤT ===")
+        self.log("\n=== HOÀN TẤT ===")
 
     def run_batch_create(self):
         text = self.txt_batch.get("1.0", tk.END).strip()
@@ -187,15 +195,16 @@ class GimiWorkspace(tk.Toplevel):
         folders = [f.strip() for f in text.split('\n') if f.strip()]
         if not folders: return
         
-        confirm = messagebox.askyesno("Xác nhận", f"Hệ thống sẽ tạo {len(folders)} thư mục nhân vật vào trong Root.\nTiếp tục?")
-        if confirm:
+        if messagebox.askyesno("Xác nhận", f"Tạo {len(folders)} thư mục nhân vật?"):
             count = 0
             for f in folders:
-                path = os.path.join(self.app.root_dir, f)
+                # Lọc ký tự cấm cơ bản cho chắc kèo
+                safe_f = re.sub(r'[\\/*?:"<>|]', "", f) 
+                path = os.path.join(self.app.root_dir, safe_f)
                 if not os.path.exists(path):
                     os.makedirs(path)
                     count += 1
-            messagebox.showinfo("Hoàn tất", f"Đã tạo thành công {count} thư mục!")
+            messagebox.showinfo("Thành công", f"Đã tạo {count} thư mục!")
             self.txt_batch.delete("1.0", tk.END)
             self.app.scan_directories()
 
@@ -203,34 +212,108 @@ class GimiWorkspace(tk.Toplevel):
 class TagManagerApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Quản Lý Tag & GIMI Workspace")
-        self.geometry("900x600")
-        self.minsize(800, 500)
+        self.title("GIMI Mod Manager Pro")
+        self.geometry("1000x650")
+        self.minsize(900, 550)
 
+        # Biến hệ thống
         self.root_dir = ""
         self.folders = []
         self.all_tags = set()
         self.current_selected = ""
         self.tag_vars = {}
+        self.mute_warning_until = 0 # Unix timestamp để ngưng cảnh báo
+        self.is_dark_mode = True
 
+        self.init_theme()
         self.create_menu()
         self.create_widgets()
+        self.apply_theme() # Khởi động với Dark Mode
+
+    # --- HỆ THỐNG GIAO DIỆN & SETTINGS ---
+    def init_theme(self):
+        self.style = ttk.Style(self)
+        self.style.theme_use('clam')
+        self.colors = {}
+
+    def toggle_theme(self):
+        self.is_dark_mode = not self.is_dark_mode
+        self.apply_theme()
+
+    def apply_theme(self):
+        if self.is_dark_mode:
+            self.colors = {'bg': '#2b2d30', 'fg': '#dfdfe0', 'field': '#1e1f22', 'select': '#2f65ca', 'btn': '#43454a', 'btn_act': '#4c5052', 'danger': '#e06c75'}
+        else:
+            self.colors = {'bg': '#f0f0f0', 'fg': '#000000', 'field': '#ffffff', 'select': '#0078D7', 'btn': '#e1e1e1', 'btn_act': '#d1d1d1', 'danger': '#d32f2f'}
+
+        bg, fg, field, select = self.colors['bg'], self.colors['fg'], self.colors['field'], self.colors['select']
+
+        self.config(bg=bg)
+        self.style.configure(".", background=bg, foreground=fg, fieldbackground=field, selectbackground=select, selectforeground=fg)
+        self.style.configure("TButton", background=self.colors['btn'], borderwidth=0, padding=5)
+        self.style.map("TButton", background=[("active", self.colors['btn_act'])])
+        self.style.configure("Danger.TButton", foreground=self.colors['danger'], font=("Segoe UI", 9, "bold"))
+        self.style.configure("TLabel", background=bg)
+        self.style.configure("TLabelframe", background=bg)
+        self.style.configure("TLabelframe.Label", background=bg, foreground=fg)
+        self.style.configure("TCheckbutton", background=bg)
+        self.style.map("TCheckbutton", background=[("active", bg)])
+
+        # Cập nhật Canvas/Scrollable Frame
+        try:
+            self.checklist_frame.canvas.config(bg=bg)
+            self.checklist_frame.scrollable_frame.config(style="TFrame")
+        except: pass
+
+        # Cập nhật Listbox thủ công
+        try: self.listbox.config(bg=field, fg=fg, selectbackground=select, selectforeground=fg)
+        except: pass
+
+    # --- KHUNG CẢNH BÁO TUỲ CHỈNH ---
+    def ask_warning(self, title, msg):
+        """Hộp thoại xác nhận có nút Ngưng cảnh báo 5 phút"""
+        if time.time() < self.mute_warning_until: return True
+        
+        res = tk.IntVar(value=0)
+        dlg = tk.Toplevel(self)
+        dlg.title(title)
+        dlg.geometry("450x150")
+        dlg.config(bg=self.colors['bg'])
+        dlg.grab_set()
+
+        ttk.Label(dlg, text=msg, wraplength=400, font=("Segoe UI", 10)).pack(pady=15)
+        btn_frame = ttk.Frame(dlg)
+        btn_frame.pack()
+
+        def set_res(val, mute=False):
+            if mute: self.mute_warning_until = time.time() + 300 # 5 phút
+            res.set(val)
+            dlg.destroy()
+
+        ttk.Button(btn_frame, text="Đồng ý", command=lambda: set_res(1)).pack(side="left", padx=5)
+        ttk.Button(btn_frame, text="Hủy", command=lambda: set_res(0)).pack(side="left", padx=5)
+        ttk.Button(btn_frame, text="Đồng ý (Ngưng hỏi trong 5p)", command=lambda: set_res(1, True)).pack(side="left", padx=5)
+
+        self.wait_window(dlg)
+        return res.get() == 1
 
     def create_menu(self):
         menubar = tk.Menu(self)
         self.config(menu=menubar)
 
-        tools_menu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="Tools", menu=tools_menu)
-        tools_menu.add_command(label="Tags Management", command=self.open_tag_manager)
-        tools_menu.add_separator()
-        tools_menu.add_command(label="GIMI Mod Workspace", command=self.open_gimi_workspace)
+        settings_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Cài đặt (Settings)", menu=settings_menu)
+        settings_menu.add_command(label="Chuyển đổi Giao diện (Dark/Light)", command=self.toggle_theme)
+
+        toolbox_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Toolbox Nâng cao", menu=toolbox_menu)
+        toolbox_menu.add_command(label="Mở GIMI Mod Workspace (Giải nén/Tạo folder)", command=self.open_gimi_workspace)
 
     def create_widgets(self):
         top_frame = ttk.Frame(self, padding=10)
         top_frame.pack(side="top", fill="x")
 
-        btn_select_root = ttk.Button(top_frame, text="Choose Folder", command=self.load_root_dir)
+        btn_select_root = ttk.Button(top_frame, text="📂 Chọn Thư Mục Root", command=self.load_root_dir)
         btn_select_root.pack(side="left", padx=(0, 10))
         self.lbl_root_path = ttk.Label(top_frame, text="Chưa chọn thư mục nào...", foreground="gray")
         self.lbl_root_path.pack(side="left", fill="x", expand=True)
@@ -238,42 +321,51 @@ class TagManagerApp(tk.Tk):
         main_pane = ttk.PanedWindow(self, orient="horizontal")
         main_pane.pack(fill="both", expand=True, padx=10, pady=10)
 
+        # --- PANEL TRÁI ---
         left_frame = ttk.Frame(main_pane)
         main_pane.add(left_frame, weight=1)
 
         search_sort_frame = ttk.Frame(left_frame)
         search_sort_frame.pack(fill="x", pady=(0, 5))
-        ttk.Label(search_sort_frame, text="Tìm:").pack(side="left")
+        ttk.Label(search_sort_frame, text="🔍 Tìm:").pack(side="left")
         self.search_var = tk.StringVar()
-        self.search_var.trace_add("write", lambda name, index, mode: self.update_folder_list())
+        self.search_var.trace_add("write", lambda n, i, m: self.update_folder_list())
         search_entry = ttk.Entry(search_sort_frame, textvariable=self.search_var)
         search_entry.pack(side="left", fill="x", expand=True, padx=5)
 
         self.sort_var = tk.StringVar(value="Sắp xếp A-Z")
-        sort_combo = ttk.Combobox(search_sort_frame, textvariable=self.sort_var, 
-                                  values=["Sắp xếp A-Z", "Sắp xếp Z-A"], state="readonly", width=12)
+        sort_combo = ttk.Combobox(search_sort_frame, textvariable=self.sort_var, values=["Sắp xếp A-Z", "Sắp xếp Z-A"], state="readonly", width=12)
         sort_combo.bind("<<ComboboxSelected>>", lambda e: self.update_folder_list())
         sort_combo.pack(side="right")
 
         list_frame = ttk.Frame(left_frame)
         list_frame.pack(fill="both", expand=True)
-        self.listbox = tk.Listbox(list_frame, font=("Segoe UI", 10), selectbackground="#0078D7")
+        self.listbox = tk.Listbox(list_frame, font=("Segoe UI", 10), highlightthickness=0)
         self.listbox.pack(side="left", fill="both", expand=True)
         list_scroll = ttk.Scrollbar(list_frame, orient="vertical", command=self.listbox.yview)
         list_scroll.pack(side="right", fill="y")
         self.listbox.config(yscrollcommand=list_scroll.set)
+        
+        # Bindings cho Listbox
         self.listbox.bind("<<ListboxSelect>>", self.on_folder_select)
+        self.listbox.bind("<Button-3>", self.show_context_menu) # Chuột phải
 
+        # Menu Chuột phải
+        self.ctx_menu = tk.Menu(self, tearoff=0)
+        self.ctx_menu.add_command(label="Mở trong File Explorer", command=self.open_in_explorer)
+        self.ctx_menu.add_separator()
+        self.ctx_menu.add_command(label="Đổi tên Thư mục", command=self.action_rename_folder)
+        self.ctx_menu.add_command(label="❌ Xóa Thư mục này", command=self.action_delete_folder)
+
+        # --- PANEL PHẢI ---
         self.right_frame = ttk.Frame(main_pane)
         main_pane.add(self.right_frame, weight=1)
 
-        self.lbl_selected_folder = ttk.Label(self.right_frame, text="Vui lòng chọn một thư mục", font=("Segoe UI", 11, "bold"))
+        self.lbl_selected_folder = ttk.Label(self.right_frame, text="Vui lòng chọn một thư mục bên trái", font=("Segoe UI", 12, "bold"))
         self.lbl_selected_folder.pack(anchor="w", pady=(0, 10))
 
-        btn_explorer = ttk.Button(self.right_frame, text="Reveal in File Explorer", command=self.open_in_explorer)
-        btn_explorer.pack(anchor="w", fill="x", pady=(0, 15))
-
-        tag_control_frame = ttk.LabelFrame(self.right_frame, text="Edit Wizard", padding=10)
+        # Khung công cụ sử dụng thường xuyên (Quản lý Tag)
+        tag_control_frame = ttk.LabelFrame(self.right_frame, text="Quản lý Tag Thư Mục", padding=10)
         tag_control_frame.pack(fill="both", expand=True)
 
         add_frame = ttk.Frame(tag_control_frame)
@@ -281,192 +373,233 @@ class TagManagerApp(tk.Tk):
         self.new_tag_var = tk.StringVar()
         entry_new_tag = ttk.Entry(add_frame, textvariable=self.new_tag_var)
         entry_new_tag.pack(side="left", fill="x", expand=True, padx=(0, 5))
-        entry_new_tag.bind("<Return>", lambda event: self.add_new_tag())
-        btn_add_tag = ttk.Button(add_frame, text="New Tag", command=self.add_new_tag)
-        btn_add_tag.pack(side="right")
+        entry_new_tag.bind("<Return>", lambda e: self.add_new_tag())
+        ttk.Button(add_frame, text="Thêm Tag Mới", command=self.add_new_tag).pack(side="right")
 
-        btn_clear_all = ttk.Button(tag_control_frame, text="Untick all Tags", command=self.clear_all_tags)
-        btn_clear_all.pack(fill="x", pady=(0, 10))
+        ttk.Button(tag_control_frame, text="Xoá TẤT CẢ Tag của thư mục này", command=self.clear_all_tags).pack(fill="x", pady=(0, 5))
+        
+        # Nút Quản lý Global (Đưa ra UI chính theo yêu cầu)
+        ttk.Button(tag_control_frame, text="⚙️ Xoá 1 Tag trên TOÀN BỘ thư mục Root", command=self.open_tag_manager).pack(fill="x", pady=(0, 10))
 
-        ttk.Label(tag_control_frame, text="List of all Tag", font=("Segoe UI", 9, "italic")).pack(anchor="w", pady=(5, 5))
+        ttk.Label(tag_control_frame, text="Danh sách Tag hệ thống (Tick để Gắn/Gỡ lẻ):", font=("Segoe UI", 9, "italic")).pack(anchor="w", pady=(5, 5))
         self.checklist_frame = ScrollableFrame(tag_control_frame)
         self.checklist_frame.pack(fill="both", expand=True)
 
+        # KHU VỰC ĐÁY (Vùng khoanh đỏ) - Tuỳ chỉnh Folder
+        action_frame = ttk.LabelFrame(self.right_frame, text="Tuỳ chỉnh Folder", padding=10)
+        action_frame.pack(fill="x", pady=(10, 0), side="bottom")
+
+        btn_action_rename = ttk.Button(action_frame, text="Đổi tên", command=self.action_rename_folder)
+        btn_action_rename.pack(side="left", fill="x", expand=True, padx=(0, 5))
+
+        btn_action_delete = ttk.Button(action_frame, text="Xoá Folder", command=self.action_delete_folder, style="Danger.TButton")
+        btn_action_delete.pack(side="left", fill="x", expand=True, padx=(5, 5))
+
+        btn_action_exp = ttk.Button(action_frame, text="Mở Explorer", command=self.open_in_explorer)
+        btn_action_exp.pack(side="left", fill="x", expand=True, padx=(5, 0))
+
         self.disable_right_panel()
 
+    # --- HÀM THAO TÁC FOLDER MỚI (RENAME / DELETE) ---
+    def show_context_menu(self, event):
+        idx = self.listbox.nearest(event.y)
+        if idx >= 0:
+            self.listbox.selection_clear(0, tk.END)
+            self.listbox.selection_set(idx)
+            self.on_folder_select(None)
+            self.ctx_menu.tk_popup(event.x_root, event.y_root)
+
+    def action_rename_folder(self):
+        if not self.current_selected: return
+        old_name = self.current_selected
+        tags, base_name = get_tags_and_basename(old_name)
+
+        new_base = simpledialog.askstring("Đổi tên", "Nhập tên nhân vật/thư mục mới (Sẽ giữ nguyên các Tag hiện tại):", initialvalue=base_name, parent=self)
+        if not new_base or new_base.strip() == base_name: return
+        
+        safe_base = re.sub(r'[\\/*?:"<>|]', "", new_base.strip())
+        
+        if not self.ask_warning("Xác nhận đổi tên", f"Đổi tên phần gốc từ '{base_name}' thành '{safe_base}'?"): return
+
+        new_full = format_folder_name(tags, safe_base)
+        try:
+            os.rename(os.path.join(self.root_dir, old_name), os.path.join(self.root_dir, new_full))
+            idx = self.folders.index(old_name)
+            self.folders[idx] = new_full
+            self.current_selected = new_full
+            self.update_folder_list()
+            self.refresh_checklist()
+            
+            # Chọn lại trên UI
+            items = self.listbox.get(0, tk.END)
+            if new_full in items:
+                self.listbox.selection_set(items.index(new_full))
+        except Exception as e:
+            messagebox.showerror("Lỗi", str(e))
+
+    def action_delete_folder(self):
+        if not self.current_selected: return
+        
+        if not self.ask_warning("CẢNH BÁO XOÁ", f"Bạn sắp XOÁ VĨNH VIỄN toàn bộ thư mục và mod bên trong:\n'{self.current_selected}'\n\nHành động này không thể hoàn tác. Tiếp tục?"): return
+
+        target = os.path.join(self.root_dir, self.current_selected)
+        try:
+            shutil.rmtree(target)
+            self.folders.remove(self.current_selected)
+            self.current_selected = ""
+            self.update_folder_list()
+            self.disable_right_panel()
+        except Exception as e:
+            messagebox.showerror("Lỗi", f"Không thể xoá: {e}")
+
+    # --- CÁC HÀM XỬ LÝ CŨ ---
     def load_root_dir(self):
-        folder_path = filedialog.askdirectory(title="Choose Folder")
-        if folder_path:
-            self.root_dir = folder_path
-            self.lbl_root_path.config(text=self.root_dir, foreground="black")
+        fp = filedialog.askdirectory(title="Chọn Thư Mục Root")
+        if fp:
+            self.root_dir = fp
+            self.lbl_root_path.config(text=self.root_dir, foreground=self.colors['fg'])
             self.scan_directories()
 
     def scan_directories(self):
         if not self.root_dir: return
-        try:
-            items = os.listdir(self.root_dir)
-            self.folders = [f for f in items if os.path.isdir(os.path.join(self.root_dir, f))]
-        except Exception as e:
-            return
-
+        try: items = os.listdir(self.root_dir)
+        except Exception: return
+        self.folders = [f for f in items if os.path.isdir(os.path.join(self.root_dir, f))]
         self.all_tags.clear()
-        for folder in self.folders:
-            tags, _ = get_tags_and_basename(folder)
-            self.all_tags.update(tags)
-            
+        for f in self.folders:
+            t, _ = get_tags_and_basename(f)
+            self.all_tags.update(t)
         self.update_folder_list()
         self.disable_right_panel()
 
     def update_folder_list(self):
-        search_term = self.search_var.get().lower()
-        sort_mode = self.sort_var.get()
-        filtered = [f for f in self.folders if search_term in f.lower()]
-        
-        if sort_mode == "Sắp xếp A-Z": filtered.sort()
+        term = self.search_var.get().lower()
+        filtered = [f for f in self.folders if term in f.lower()]
+        if self.sort_var.get() == "Sắp xếp A-Z": filtered.sort()
         else: filtered.sort(reverse=True)
-
         self.listbox.delete(0, tk.END)
         for f in filtered: self.listbox.insert(tk.END, f)
 
     def on_folder_select(self, event):
-        selection = self.listbox.curselection()
-        if not selection: return
-        selected_idx = selection[0]
-        self.current_selected = self.listbox.get(selected_idx)
-        self.lbl_selected_folder.config(text=f"Đang chọn: {self.current_selected}")
+        sel = self.listbox.curselection()
+        if not sel: return
+        self.current_selected = self.listbox.get(sel[0])
+        self.lbl_selected_folder.config(text=f"📂 Đang chọn: {self.current_selected}")
         self.enable_right_panel()
         self.refresh_checklist()
 
     def refresh_checklist(self):
-        for widget in self.checklist_frame.scrollable_frame.winfo_children(): widget.destroy()
+        for w in self.checklist_frame.scrollable_frame.winfo_children(): w.destroy()
         if not self.current_selected: return
-        current_tags, _ = get_tags_and_basename(self.current_selected)
+        cur_tags, _ = get_tags_and_basename(self.current_selected)
         self.tag_vars.clear()
-        for tag in sorted(list(self.all_tags)):
-            var = tk.BooleanVar(value=(tag in current_tags))
-            self.tag_vars[tag] = var
-            chk = ttk.Checkbutton(self.checklist_frame.scrollable_frame, text=f"[{tag}]", variable=var,
-                                  command=lambda t=tag, v=var: self.on_checkbox_toggle(t, v))
-            chk.pack(anchor="w", padx=5, pady=2)
+        for t in sorted(list(self.all_tags)):
+            var = tk.BooleanVar(value=(t in cur_tags))
+            self.tag_vars[t] = var
+            ttk.Checkbutton(self.checklist_frame.scrollable_frame, text=f"[{t}]", variable=var,
+                            command=lambda t=t, v=var: self.on_checkbox_toggle(t, v)).pack(anchor="w", padx=5, pady=2)
 
     def on_checkbox_toggle(self, tag, var):
         if not self.current_selected: return
-        current_tags, _ = get_tags_and_basename(self.current_selected)
+        cur_tags, _ = get_tags_and_basename(self.current_selected)
         if var.get():
-            if tag not in current_tags: current_tags.append(tag)
+            if tag not in cur_tags: cur_tags.append(tag)
         else:
-            if tag in current_tags: current_tags.remove(tag)
-        self.rename_folder(current_tags)
+            if tag in cur_tags: cur_tags.remove(tag)
+        self.rename_folder(cur_tags)
 
     def add_new_tag(self):
-        new_tag = self.new_tag_var.get().strip().replace("[", "").replace("]", "")
-        if not new_tag: return
-        self.all_tags.add(new_tag)
+        nt = self.new_tag_var.get().strip().replace("[", "").replace("]", "")
+        if not nt: return
+        self.all_tags.add(nt)
         self.new_tag_var.set("")
         if self.current_selected:
-            current_tags, _ = get_tags_and_basename(self.current_selected)
-            if new_tag not in current_tags:
-                current_tags.append(new_tag)
-                self.rename_folder(current_tags)
-        else:
-            self.refresh_checklist()
+            cur, _ = get_tags_and_basename(self.current_selected)
+            if nt not in cur:
+                cur.append(nt)
+                self.rename_folder(cur)
+        else: self.refresh_checklist()
 
     def clear_all_tags(self):
-        if not self.current_selected: return
-        self.rename_folder([])
+        if self.current_selected: self.rename_folder([])
 
     def rename_folder(self, new_tags):
-        old_name = self.current_selected
-        _, base_name = get_tags_and_basename(old_name)
-        new_name = format_folder_name(new_tags, base_name)
-        if old_name == new_name: return
-
-        old_path = os.path.join(self.root_dir, old_name)
-        new_path = os.path.join(self.root_dir, new_name)
+        old = self.current_selected
+        _, base = get_tags_and_basename(old)
+        new_name = format_folder_name(new_tags, base)
+        if old == new_name: return
         try:
-            os.rename(old_path, new_path)
-            if old_name in self.folders:
-                idx = self.folders.index(old_name)
-                self.folders[idx] = new_name
+            os.rename(os.path.join(self.root_dir, old), os.path.join(self.root_dir, new_name))
+            self.folders[self.folders.index(old)] = new_name
             self.current_selected = new_name
-            self.lbl_selected_folder.config(text=f"Đang chọn: {self.current_selected}")
+            self.lbl_selected_folder.config(text=f"📂 Đang chọn: {self.current_selected}")
             self.update_folder_list()
             self.refresh_checklist()
             
             items = self.listbox.get(0, tk.END)
-            if new_name in items:
-                idx = items.index(new_name)
-                self.listbox.selection_set(idx)
-                self.listbox.see(idx)
-        except Exception as e:
-            messagebox.showerror("Lỗi", str(e))
-
-    def open_in_explorer(self):
-        if not self.root_dir or not self.current_selected: return
-        folder_path = os.path.join(self.root_dir, self.current_selected)
-        try: subprocess.Popen(f'explorer /select,"{os.path.normpath(folder_path)}"')
+            if new_name in items: self.listbox.selection_set(items.index(new_name))
         except Exception as e: messagebox.showerror("Lỗi", str(e))
 
+    def open_in_explorer(self):
+        if self.root_dir and self.current_selected:
+            subprocess.Popen(f'explorer /select,"{os.path.normpath(os.path.join(self.root_dir, self.current_selected))}"')
+
     def open_tag_manager(self):
-        if not self.root_dir:
-            messagebox.showinfo("Thông báo", "Vui lòng 'Choose Folder' trước!")
-            return
+        if not self.root_dir: return messagebox.showinfo("Thông báo", "Vui lòng chọn Thư mục Root trước!")
         top = tk.Toplevel(self)
-        top.title("Tags Management")
+        top.title("Global Tag Manager")
         top.geometry("400x350")
+        top.config(bg=self.colors['bg'])
         top.grab_set()
         
-        ttk.Label(top, text="Chọn Tag bên dưới để XOÁ khỏi TOÀN BỘ thư mục:", font=("Segoe UI", 10)).pack(pady=10, padx=10, anchor="w")
-        listbox_tags = tk.Listbox(top, font=("Segoe UI", 11))
-        listbox_tags.pack(fill="both", expand=True, padx=10)
-        for tag in sorted(list(self.all_tags)): listbox_tags.insert(tk.END, tag)
+        ttk.Label(top, text="Chọn Tag bên dưới để XOÁ khỏi TOÀN BỘ thư mục:").pack(pady=10, padx=10, anchor="w")
+        lbox = tk.Listbox(top, font=("Segoe UI", 11), bg=self.colors['field'], fg=self.colors['fg'])
+        lbox.pack(fill="both", expand=True, padx=10)
+        for t in sorted(list(self.all_tags)): lbox.insert(tk.END, t)
             
         def apply_global_delete():
-            selection = listbox_tags.curselection()
-            if not selection: return
-            target_tag = listbox_tags.get(selection[0])
-            if not messagebox.askyesno("Cảnh báo", f"Xoá tag [{target_tag}] khỏi TOÀN BỘ thư mục?"): return
+            sel = lbox.curselection()
+            if not sel: return
+            tgt = lbox.get(sel[0])
+            if not messagebox.askyesno("Cảnh báo", f"Xoá [{tgt}] khỏi TOÀN BỘ thư mục?"): return
             
-            count = 0
-            for old_name in list(self.folders):
-                tags, base_name = get_tags_and_basename(old_name)
-                if target_tag in tags:
-                    tags.remove(target_tag)
-                    new_name = format_folder_name(tags, base_name)
-                    old_path = os.path.join(self.root_dir, old_name)
-                    new_path = os.path.join(self.root_dir, new_name)
+            c = 0
+            for old in list(self.folders):
+                ts, base = get_tags_and_basename(old)
+                if tgt in ts:
+                    ts.remove(tgt)
+                    nn = format_folder_name(ts, base)
                     try:
-                        os.rename(old_path, new_path)
-                        self.folders[self.folders.index(old_name)] = new_name
-                        count += 1
+                        os.rename(os.path.join(self.root_dir, old), os.path.join(self.root_dir, nn))
+                        self.folders[self.folders.index(old)] = nn
+                        c += 1
                     except: pass
-            messagebox.showinfo("Thành công", f"Đã xoá tag khỏi {count} thư mục!")
+            messagebox.showinfo("Thành công", f"Đã xoá khỏi {c} thư mục!")
             self.scan_directories()
             top.destroy()
-        ttk.Button(top, text="Xoá Tag Đã Chọn Trền Mọi Thư Mục", command=apply_global_delete).pack(fill="x", padx=10, pady=10)
+            
+        ttk.Button(top, text="Thực thi Xóa Tag", command=apply_global_delete, style="Danger.TButton").pack(fill="x", padx=10, pady=10)
 
     def open_gimi_workspace(self):
-        if not self.root_dir:
-            messagebox.showinfo("Lỗi", "Vui lòng 'Choose Folder' (Thư mục Mods) để làm Root trước khi dùng GIMI Workspace.")
-            return
+        if not self.root_dir: return messagebox.showinfo("Lỗi", "Vui lòng Chọn Root trước.")
         GimiWorkspace(self, self)
 
     def disable_right_panel(self):
-        for child in self.right_frame.winfo_children():
-            if isinstance(child, (ttk.Button, ttk.LabelFrame, tk.Frame)):
-                for subchild in child.winfo_children():
-                    try: subchild.configure(state="disabled")
+        for c in self.right_frame.winfo_children():
+            if isinstance(c, (ttk.Button, ttk.LabelFrame, tk.Frame)):
+                for sc in c.winfo_children():
+                    try: sc.configure(state="disabled")
                     except: pass
-            try: child.configure(state="disabled")
+            try: c.configure(state="disabled")
             except: pass
 
     def enable_right_panel(self):
-        for child in self.right_frame.winfo_children():
-            if isinstance(child, (ttk.Button, ttk.LabelFrame, tk.Frame)):
-                for subchild in child.winfo_children():
-                    try: subchild.configure(state="normal")
+        for c in self.right_frame.winfo_children():
+            if isinstance(c, (ttk.Button, ttk.LabelFrame, tk.Frame)):
+                for sc in c.winfo_children():
+                    try: sc.configure(state="normal")
                     except: pass
-            try: child.configure(state="normal")
+            try: c.configure(state="normal")
             except: pass
 
 if __name__ == "__main__":
