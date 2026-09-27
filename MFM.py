@@ -232,6 +232,7 @@ class TagManagerApp(tk.Tk):
         self.apply_theme()
 
     def apply_theme(self):
+        # Thêm 2 màu mới: tab_unsel (màu tab khi không chọn) và cursor (màu con trỏ chuột)
         if self.is_dark_mode:
             self.colors = {'bg': '#2b2d30', 'fg': '#dfdfe0', 'field': '#1e1f22', 'select': '#2f65ca', 'btn': '#43454a', 'btn_act': '#4c5052', 'danger': '#e06c75', 'tab_unsel': '#393b40', 'cursor': '#ffffff'}
         else:
@@ -241,27 +242,33 @@ class TagManagerApp(tk.Tk):
 
         self.config(bg=bg)
         
+        # Xóa ép màu toàn cục, cấu hình chi tiết cho từng loại Widget
         self.style.configure(".", background=bg, foreground=fg)
         self.style.configure("TFrame", background=bg)
         self.style.configure("TLabel", background=bg, foreground=fg)
         self.style.configure("TLabelframe", background=bg, foreground=fg)
         self.style.configure("TLabelframe.Label", background=bg, foreground=fg)
         
+        # Nút bấm
         self.style.configure("TButton", background=self.colors['btn'], foreground=fg, borderwidth=0, padding=5)
         self.style.map("TButton", background=[("active", self.colors['btn_act'])])
         self.style.configure("Danger.TButton", foreground=self.colors['danger'], font=("Segoe UI", 9, "bold"))
         
+        # Checkbox
         self.style.configure("TCheckbutton", background=bg, foreground=fg)
         self.style.map("TCheckbutton", background=[("active", bg)], foreground=[("active", fg)])
 
+        # Entry & Combobox (Sửa lỗi nền trắng ở Combobox)
         self.style.configure("TEntry", fieldbackground=field, foreground=fg, insertcolor=self.colors['cursor'])
         self.style.configure("TCombobox", fieldbackground=field, background=self.colors['btn'], foreground=fg)
         self.style.map("TCombobox", fieldbackground=[("readonly", field)], foreground=[("readonly", fg)], selectbackground=[("readonly", select)])
 
+        # Notebook Tabs (Sửa lỗi tàng hình chữ ở Tab không được chọn)
         self.style.configure("TNotebook", background=bg, borderwidth=0)
         self.style.configure("TNotebook.Tab", background=self.colors['tab_unsel'], foreground=fg, padding=[10, 2])
         self.style.map("TNotebook.Tab", background=[("selected", field)], foreground=[("selected", fg)])
 
+        # Cập nhật các Widget tiêu chuẩn của Tkinter
         try:
             self.checklist_frame.canvas.config(bg=bg)
             self.checklist_frame.scrollable_frame.config(style="TFrame")
