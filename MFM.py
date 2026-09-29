@@ -32,13 +32,15 @@ def format_folder_name(tags, base_name):
     if not valid_tags: return base_name
     return " ".join(valid_tags) + " " + base_name
 
-def is_exact_match(char_name, file_name):
-    f_name = re.sub(r'[^a-zA-Z0-9]', ' ', file_name).lower()
-    c_spaced = re.sub(r'[^a-zA-Z0-9]', ' ', char_name).lower()
-    c_solid = re.sub(r'[^a-zA-Z0-9]', '', char_name).lower()
-    pattern1 = r'\b' + re.escape(c_spaced) + r'\b'
-    pattern2 = r'\b' + re.escape(c_solid) + r'\b'
-    return bool(re.search(pattern1, f_name) or re.search(pattern2, f_name))
+def is_smart_match(char_name, target_name):
+    """
+    Thuật toán nhận diện thông minh (Inteli Routing): 
+    Bỏ qua toàn bộ khoảng trắng/kí tự đặc biệt và tìm chuỗi con.
+    """
+    t_clean = re.sub(r'[^a-zA-Z0-9]', '', target_name).lower()
+    c_clean = re.sub(r'[^a-zA-Z0-9]', '', char_name).lower()
+    if not c_clean: return False
+    return c_clean in t_clean
 
 # --- COMPONENT UI ---
 class ScrollableFrame(ttk.Frame):
@@ -60,13 +62,13 @@ class GimiWorkspace(tk.Toplevel):
         super().__init__(parent)
         self.app = app_instance
         self.title("GIMI Toolbox (Dùng 1 lần)")
-        self.geometry("650x480")
+        self.geometry("680x500")
         self.grab_set()
 
         notebook = ttk.Notebook(self)
         notebook.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # TAB 1
+        # ================= TAB 1: AUTO-DEPLOY =================
         tab_deploy = ttk.Frame(notebook)
         notebook.add(tab_deploy, text="Triển khai File Mod (Auto-Route)")
 
@@ -79,7 +81,7 @@ class GimiWorkspace(tk.Toplevel):
                                insertbackground=self.app.colors['cursor'])
         self.log_txt.pack(fill="both", expand=True, padx=10, pady=(5, 10))
 
-        # TAB 2
+        # ================= TAB 2: BATCH CREATOR =================
         tab_batch = ttk.Frame(notebook)
         notebook.add(tab_batch, text="Tạo Thư Mục Hàng Loạt")
         
@@ -90,11 +92,25 @@ class GimiWorkspace(tk.Toplevel):
         self.txt_batch.pack(fill="both", expand=True, padx=10)
         ttk.Button(tab_batch, text="Tạo Các Thư Mục Này", command=self.run_batch_create).pack(pady=10, padx=10, fill="x")
 
-    def log(self, message):
-        self.log_txt.config(state="normal")
-        self.log_txt.insert(tk.END, message + "\n")
-        self.log_txt.see(tk.END)
-        self.log_txt.config(state="disabled")
+        # ================= TAB 3: AUTO-MOVE FOLDERS =================
+        tab_move = ttk.Frame(notebook)
+        notebook.add(tab_move, text="Chuyển Folder (Auto-Move)")
+
+        ttk.Label(tab_move, text="Chọn 1 Thư mục Nguồn đang chứa các folder Mod lộn xộn -> Hệ thống tự đối sánh và di chuyển chúng vào đúng folder Nhân vật.", wraplength=600).pack(pady=10, padx=10, anchor="w")
+        self.btn_move = ttk.Button(tab_move, text="Chọn Thư mục chứa Mod cần chuyển", command=self.run_auto_move_folders)
+        self.btn_move.pack(pady=5, fill="x", padx=10)
+
+        self.log_txt_move = tk.Text(tab_move, height=15, font=("Consolas", 9), state="disabled", 
+                               bg=self.app.colors['field'], fg=self.app.colors['fg'], 
+                               insertbackground=self.app.colors['cursor'])
+        self.log_txt_move.pack(fill="both", expand=True, padx=10, pady=(5, 10))
+
+    def log(self, message, target_widget=None):
+        if target_widget is None: target_widget = self.log_txt
+        target_widget.config(state="normal")
+        target_widget.insert(tk.END, message + "\n")
+        target_widget.see(tk.END)
+        target_widget.config(state="disabled")
         self.update_idletasks()
 
     def apply_rule_2(self, base_folder):
@@ -135,6 +151,9 @@ class GimiWorkspace(tk.Toplevel):
         if not files: return
         self.log("Bắt đầu quy trình Deploy...")
         
+        # Sắp xếp nhân vật theo độ dài tên (ưu tiên Alhaitham trước Al)
+        sorted_chars = sorted(self.app.folders, key=lambda f: len(get_tags_and_basename(f)[1]), reverse=True)
+
         for file_path in files:
             basename = os.path.basename(file_path)
             name_no_ext, ext = os.path.splitext(basename)
@@ -142,9 +161,9 @@ class GimiWorkspace(tk.Toplevel):
             self.log(f"\nĐang xử lý: {basename}")
 
             target_char = None
-            for folder_name in self.app.folders:
+            for folder_name in sorted_chars:
                 _, char_name = get_tags_and_basename(folder_name)
-                if is_exact_match(char_name, name_no_ext):
+                if is_smart_match(char_name, name_no_ext):
                     target_char = folder_name
                     break
             
@@ -181,7 +200,64 @@ class GimiWorkspace(tk.Toplevel):
                 if os.path.exists(dest_path): shutil.rmtree(dest_path, ignore_errors=True)
         
         self.app.scan_directories()
-        self.log("\n=== HOÀN TẤT ===")
+        self.log("\n=== HOÀN TẤT DEPLOY ===")
+
+    def run_auto_move_folders(self):
+        source_dir = filedialog.askdirectory(title="Chọn thư mục NGUỒN chứa các Folder Mod")
+        if not source_dir: return
+        
+        # Ngăn chặn việc chọn Root làm Nguồn gây loạn hệ thống
+        if os.path.normpath(source_dir) == os.path.normpath(self.app.root_dir):
+            messagebox.showerror("Lỗi", "Thư mục Nguồn không được trùng với Thư mục Root (Đích)!")
+            return
+
+        self.log("Bắt đầu quy trình Auto-Move Folders...", self.log_txt_move)
+        
+        try:
+            items = os.listdir(source_dir)
+            folders_to_move = [f for f in items if os.path.isdir(os.path.join(source_dir, f))]
+        except Exception as e:
+            self.log(f"-> Không thể đọc thư mục: {e}", self.log_txt_move)
+            return
+        
+        if not folders_to_move:
+            self.log("-> Không tìm thấy folder con nào trong thư mục Nguồn.", self.log_txt_move)
+            return
+
+        # Sắp xếp nhân vật theo độ dài tên
+        sorted_chars = sorted(self.app.folders, key=lambda f: len(get_tags_and_basename(f)[1]), reverse=True)
+
+        for folder_name in folders_to_move:
+            src_path = os.path.join(source_dir, folder_name)
+            self.log(f"\nĐang xử lý Folder: {folder_name}", self.log_txt_move)
+
+            target_char = None
+            for char_folder in sorted_chars:
+                _, char_name = get_tags_and_basename(char_folder)
+                if is_smart_match(char_name, folder_name):
+                    target_char = char_folder
+                    break
+            
+            if not target_char:
+                target_char = "Uncategorized_Mods"
+                self.log(f"   -> Không khớp ai, đưa vào '{target_char}'", self.log_txt_move)
+                uncat_path = os.path.join(self.app.root_dir, target_char)
+                if not os.path.exists(uncat_path): os.makedirs(uncat_path)
+
+            dest_path = os.path.join(self.app.root_dir, target_char, folder_name)
+            
+            try:
+                # Xử lý nếu folder đích đã tồn tại (Chống đè file)
+                if os.path.exists(dest_path):
+                    dest_path = dest_path + "_" + str(int(time.time()))
+                
+                shutil.move(src_path, dest_path)
+                self.log(f"   -> Đã chuyển thành công vào: {target_char}", self.log_txt_move)
+            except Exception as e:
+                self.log(f"   -> LỖI: {e}", self.log_txt_move)
+
+        self.app.scan_directories()
+        self.log("\n=== HOÀN TẤT CHUYỂN FOLDER ===", self.log_txt_move)
 
     def run_batch_create(self):
         text = self.txt_batch.get("1.0", tk.END).strip()
@@ -232,7 +308,6 @@ class TagManagerApp(tk.Tk):
         self.apply_theme()
 
     def apply_theme(self):
-        # Thêm 2 màu mới: tab_unsel (màu tab khi không chọn) và cursor (màu con trỏ chuột)
         if self.is_dark_mode:
             self.colors = {'bg': '#2b2d30', 'fg': '#dfdfe0', 'field': '#1e1f22', 'select': '#2f65ca', 'btn': '#43454a', 'btn_act': '#4c5052', 'danger': '#e06c75', 'tab_unsel': '#393b40', 'cursor': '#ffffff'}
         else:
@@ -242,33 +317,27 @@ class TagManagerApp(tk.Tk):
 
         self.config(bg=bg)
         
-        # Xóa ép màu toàn cục, cấu hình chi tiết cho từng loại Widget
         self.style.configure(".", background=bg, foreground=fg)
         self.style.configure("TFrame", background=bg)
         self.style.configure("TLabel", background=bg, foreground=fg)
         self.style.configure("TLabelframe", background=bg, foreground=fg)
         self.style.configure("TLabelframe.Label", background=bg, foreground=fg)
         
-        # Nút bấm
         self.style.configure("TButton", background=self.colors['btn'], foreground=fg, borderwidth=0, padding=5)
         self.style.map("TButton", background=[("active", self.colors['btn_act'])])
         self.style.configure("Danger.TButton", foreground=self.colors['danger'], font=("Segoe UI", 9, "bold"))
         
-        # Checkbox
         self.style.configure("TCheckbutton", background=bg, foreground=fg)
         self.style.map("TCheckbutton", background=[("active", bg)], foreground=[("active", fg)])
 
-        # Entry & Combobox (Sửa lỗi nền trắng ở Combobox)
         self.style.configure("TEntry", fieldbackground=field, foreground=fg, insertcolor=self.colors['cursor'])
         self.style.configure("TCombobox", fieldbackground=field, background=self.colors['btn'], foreground=fg)
         self.style.map("TCombobox", fieldbackground=[("readonly", field)], foreground=[("readonly", fg)], selectbackground=[("readonly", select)])
 
-        # Notebook Tabs (Sửa lỗi tàng hình chữ ở Tab không được chọn)
         self.style.configure("TNotebook", background=bg, borderwidth=0)
         self.style.configure("TNotebook.Tab", background=self.colors['tab_unsel'], foreground=fg, padding=[10, 2])
         self.style.map("TNotebook.Tab", background=[("selected", field)], foreground=[("selected", fg)])
 
-        # Cập nhật các Widget tiêu chuẩn của Tkinter
         try:
             self.checklist_frame.canvas.config(bg=bg)
             self.checklist_frame.scrollable_frame.config(style="TFrame")
