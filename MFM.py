@@ -36,6 +36,7 @@ def is_smart_match(char_name, target_name):
     """
     Thuật toán nhận diện thông minh (Inteli Routing): 
     Bỏ qua toàn bộ khoảng trắng/kí tự đặc biệt và tìm chuỗi con.
+    Giải quyết triệt để các ca như 'ambercn', 'ambermod'.
     """
     t_clean = re.sub(r'[^a-zA-Z0-9]', '', target_name).lower()
     c_clean = re.sub(r'[^a-zA-Z0-9]', '', char_name).lower()
@@ -62,7 +63,7 @@ class GimiWorkspace(tk.Toplevel):
         super().__init__(parent)
         self.app = app_instance
         self.title("GIMI Toolbox (Dùng 1 lần)")
-        self.geometry("680x500")
+        self.geometry("700x520")
         self.grab_set()
 
         notebook = ttk.Notebook(self)
@@ -72,7 +73,7 @@ class GimiWorkspace(tk.Toplevel):
         tab_deploy = ttk.Frame(notebook)
         notebook.add(tab_deploy, text="Triển khai File Mod (Auto-Route)")
 
-        ttk.Label(tab_deploy, text="Tự nhận diện file -> Đưa vào folder nhân vật -> Giải nén (.zip/.rar/.7z) -> Khử lồng & Xoá nén gốc.", wraplength=600).pack(pady=10, padx=10, anchor="w")
+        ttk.Label(tab_deploy, text="Tự nhận diện file -> Đưa vào folder nhân vật -> Giải nén (.zip/.rar/.7z) -> Khử lồng & Xoá nén gốc.", wraplength=650).pack(pady=10, padx=10, anchor="w")
         self.btn_deploy = ttk.Button(tab_deploy, text="Chọn Các File Nén (Zip/Rar/7z)", command=self.run_auto_deploy)
         self.btn_deploy.pack(pady=5, fill="x", padx=10)
 
@@ -96,8 +97,8 @@ class GimiWorkspace(tk.Toplevel):
         tab_move = ttk.Frame(notebook)
         notebook.add(tab_move, text="Chuyển Folder (Auto-Move)")
 
-        ttk.Label(tab_move, text="Chọn 1 Thư mục Nguồn đang chứa các folder Mod lộn xộn -> Hệ thống tự đối sánh và di chuyển chúng vào đúng folder Nhân vật.", wraplength=600).pack(pady=10, padx=10, anchor="w")
-        self.btn_move = ttk.Button(tab_move, text="Chọn Thư mục chứa Mod cần chuyển", command=self.run_auto_move_folders)
+        ttk.Label(tab_move, text="Chọn 1 Thư mục Nguồn chứa các folder Mod -> Tự phân loại và di chuyển thẳng vào Root -> Khử lồng.", wraplength=650).pack(pady=10, padx=10, anchor="w")
+        self.btn_move = ttk.Button(tab_move, text="Chọn Thư mục chứa các Mod cần chuyển", command=self.run_auto_move_folders)
         self.btn_move.pack(pady=5, fill="x", padx=10)
 
         self.log_txt_move = tk.Text(tab_move, height=15, font=("Consolas", 9), state="disabled", 
@@ -113,9 +114,12 @@ class GimiWorkspace(tk.Toplevel):
         target_widget.config(state="disabled")
         self.update_idletasks()
 
-    def apply_rule_2(self, base_folder):
+    def apply_rule_2(self, base_folder, log_widget=None):
+        """Khử lồng thư mục thuật toán bóc vỏ hành. log_widget để hiện đúng Tab đang chạy"""
+        if log_widget is None: log_widget = self.log_txt
         base_folder_norm = os.path.normpath(base_folder)
         peeled = False
+
         while True:
             try: items = os.listdir(base_folder_norm)
             except Exception: break
@@ -129,7 +133,7 @@ class GimiWorkspace(tk.Toplevel):
                 
             single_sub_dir = dirs[0]
             sub_dir_path = os.path.join(base_folder_norm, single_sub_dir)
-            self.log(f"   -> [Rule 2] Đang bóc lớp vỏ rác: '{single_sub_dir}'")
+            self.log(f"   -> [Rule 2] Đang bóc lớp vỏ rác: '{single_sub_dir}'", log_widget)
             
             try:
                 sub_items = os.listdir(sub_dir_path)
@@ -140,18 +144,18 @@ class GimiWorkspace(tk.Toplevel):
                 os.rmdir(sub_dir_path)
                 peeled = True
             except Exception as e:
-                self.log(f"   -> [Rule 2] Bị chặn khi gỡ lồng: {e}")
+                self.log(f"   -> [Rule 2] Bị chặn khi gỡ lồng: {e}", log_widget)
                 break
                 
-        if peeled: self.log("   -> [Rule 2] Gỡ lồng hoàn tất.")
-        else: self.log("   -> [Rule 2] Cấu trúc đã chuẩn, bỏ qua gỡ lồng.")
+        if peeled: self.log("   -> [Rule 2] Gỡ lồng hoàn tất.", log_widget)
+        else: self.log("   -> [Rule 2] Cấu trúc đã chuẩn, bỏ qua gỡ lồng.", log_widget)
 
     def run_auto_deploy(self):
         files = filedialog.askopenfilenames(title="Chọn Mod", filetypes=[("Archive Files", "*.zip *.rar *.7z")])
         if not files: return
         self.log("Bắt đầu quy trình Deploy...")
         
-        # Sắp xếp nhân vật theo độ dài tên (ưu tiên Alhaitham trước Al)
+        # Sắp xếp nhân vật theo độ dài tên (ưu tiên nhận diện tên dài trước tên ngắn)
         sorted_chars = sorted(self.app.folders, key=lambda f: len(get_tags_and_basename(f)[1]), reverse=True)
 
         for file_path in files:
@@ -191,7 +195,7 @@ class GimiWorkspace(tk.Toplevel):
                     raise Exception("Lỗi: Giải nén xong thư mục bị rỗng (File nén có thể bị hỏng)!")
 
                 self.log("   -> Giải nén thành công.")
-                self.apply_rule_2(dest_path)
+                self.apply_rule_2(dest_path, self.log_txt)
                 os.remove(file_path)
                 self.log("   -> Đã xoá file nén gốc.")
 
@@ -206,7 +210,7 @@ class GimiWorkspace(tk.Toplevel):
         source_dir = filedialog.askdirectory(title="Chọn thư mục NGUỒN chứa các Folder Mod")
         if not source_dir: return
         
-        # Ngăn chặn việc chọn Root làm Nguồn gây loạn hệ thống
+        # Ngăn chặn việc chọn Root làm Nguồn gây lỗi ghi đè vòng lặp
         if os.path.normpath(source_dir) == os.path.normpath(self.app.root_dir):
             messagebox.showerror("Lỗi", "Thư mục Nguồn không được trùng với Thư mục Root (Đích)!")
             return
@@ -224,7 +228,6 @@ class GimiWorkspace(tk.Toplevel):
             self.log("-> Không tìm thấy folder con nào trong thư mục Nguồn.", self.log_txt_move)
             return
 
-        # Sắp xếp nhân vật theo độ dài tên
         sorted_chars = sorted(self.app.folders, key=lambda f: len(get_tags_and_basename(f)[1]), reverse=True)
 
         for folder_name in folders_to_move:
@@ -247,12 +250,16 @@ class GimiWorkspace(tk.Toplevel):
             dest_path = os.path.join(self.app.root_dir, target_char, folder_name)
             
             try:
-                # Xử lý nếu folder đích đã tồn tại (Chống đè file)
+                # Chống lỗi trùng tên nếu trong thư mục nhân vật đã có folder mod tên đó
                 if os.path.exists(dest_path):
                     dest_path = dest_path + "_" + str(int(time.time()))
                 
                 shutil.move(src_path, dest_path)
                 self.log(f"   -> Đã chuyển thành công vào: {target_char}", self.log_txt_move)
+                
+                # Gọi Rule 2 để gỡ lồng luôn cho các folder vừa chuyển vào
+                self.apply_rule_2(dest_path, self.log_txt_move)
+
             except Exception as e:
                 self.log(f"   -> LỖI: {e}", self.log_txt_move)
 
