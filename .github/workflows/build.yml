@@ -25,7 +25,7 @@ jobs:
 
     - name: Build EXE with PyInstaller
       run: |
-        pyinstaller --onefile --noconsole GIMI_Mod_Folder_Manager/MFM.py
+        pyinstaller --onefile --noconsole MFM.py
 
     - name: Create GitHub Release and Upload Asset
       uses: softprops/action-gh-release@v2
